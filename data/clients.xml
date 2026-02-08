@@ -125,6 +125,12 @@
 			<extensions from="7.6" to="7.6"/>
 			<data format="7.55" dat="0x439D5A33" spr="0x439852BE"/>
 		</client>
+		
+		<client name="7.92" otb="7.92" visible="true" data_directory="792">
+			<otbm version="3"/>
+			<extensions from="7.92" to="7.92"/>
+			<data format="7.8" dat="0x459E7B73" spr="0x45880FE8"/>
+		</client>
 
 		<client name="8.00" otb="8.00" visible="true" data_directory="800">
 			<otbm version="2"/>
@@ -286,6 +292,7 @@
 			<otbm version="3"/>
 			<extensions from="8.20 - 8.31" to="10.98"/>
 			<data format="10.57" dat="0x42A3" spr="0x57BBD603"/>
+			<data format="10.57" dat="0x4A10" spr="0x59E48E02"/>
 		</client>
 
 		<client name="10.100" otb="10.100" visible="true" data_directory="10100">
