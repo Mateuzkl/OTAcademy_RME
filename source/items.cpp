@@ -1092,7 +1092,9 @@ bool ItemDatabase::typeExists(int id) const {
 bool ItemDatabase::unserializeDatItem(ItemType* t, const uint8_t* buf, size_t& pos, size_t bufSize, bool extendedSprites) {
 	uint8_t flag;
 	do {
-		if (pos >= bufSize) return false;
+		if (pos >= bufSize) {
+			return false;
+		}
 		flag = buf[pos++];
 
 		switch (flag) {
@@ -1264,7 +1266,9 @@ bool ItemDatabase::unserializeDatItem(ItemType* t, const uint8_t* buf, size_t& p
 	} while (flag != 0xFF);
 
 	// Skip sprite data
-	if (pos + 2 > bufSize) return false;
+	if (pos + 2 > bufSize) {
+		return false;
+	}
 	uint8_t _width = buf[pos++];
 	uint8_t _height = buf[pos++];
 	if (_width > 1 || _height > 1) {
@@ -1277,8 +1281,7 @@ bool ItemDatabase::unserializeDatItem(ItemType* t, const uint8_t* buf, size_t& p
 	uint8_t _patternZ = buf[pos++];
 	uint8_t _frames = buf[pos++];
 
-	uint32_t numSprites = static_cast<uint32_t>(_width) * _height * _layers *
-	                      _patternX * _patternY * _patternZ * _frames;
+	uint32_t numSprites = static_cast<uint32_t>(_width) * _height * _layers * _patternX * _patternY * _patternZ * _frames;
 
 	uint32_t spriteIdBytes = extendedSprites ? 4 : 2;
 	pos += static_cast<size_t>(spriteIdBytes) * numSprites;
@@ -1325,13 +1328,25 @@ bool ItemDatabase::loadFromDat(const FileName& datafile, wxString& error, wxArra
 		bool ok = true;
 		uint8_t b;
 		do {
-			if (detectPos >= fileSize) { ok = false; break; }
+			if (detectPos >= fileSize) {
+				ok = false;
+				break;
+			}
 			b = buf[detectPos++];
 			switch (b) {
-				case 0: case 8: case 9: case 25: case 28: case 29: case 32:
-					detectPos += 2; break;
-				case 21: case 24:
-					detectPos += 4; break;
+				case 0:
+				case 8:
+				case 9:
+				case 25:
+				case 28:
+				case 29:
+				case 32:
+					detectPos += 2;
+					break;
+				case 21:
+				case 24:
+					detectPos += 4;
+					break;
 				case 33: {
 					detectPos += 6;
 					uint16_t nameLen;
@@ -1340,9 +1355,12 @@ bool ItemDatabase::loadFromDat(const FileName& datafile, wxString& error, wxArra
 					detectPos += nameLen + 4;
 					break;
 				}
-				case 255: break;
+				case 255:
+					break;
 				default:
-					if (b > 33) { ok = false; }
+					if (b > 33) {
+						ok = false;
+					}
 					break;
 			}
 		} while (ok && b != 0xFF);
@@ -1350,7 +1368,9 @@ bool ItemDatabase::loadFromDat(const FileName& datafile, wxString& error, wxArra
 		if (ok && detectPos + 8 < fileSize) {
 			uint8_t w = buf[detectPos++];
 			uint8_t h = buf[detectPos++];
-			if (w > 1 || h > 1) detectPos++;
+			if (w > 1 || h > 1) {
+				detectPos++;
+			}
 			uint8_t layers = buf[detectPos++];
 			uint8_t px = buf[detectPos++];
 			uint8_t py = buf[detectPos++];
