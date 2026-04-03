@@ -1959,6 +1959,7 @@ void MapDrawer::DrawHookIndicator(int x, int y, const ItemType& type) {
 }
 
 void MapDrawer::DrawTooltips() {
+	glDisable(GL_TEXTURE_2D);
 	for (std::vector<MapTooltip*>::const_iterator it = tooltips.begin(); it != tooltips.end(); ++it) {
 		MapTooltip* tooltip = (*it);
 		const char* text = tooltip->text.c_str();
@@ -2062,6 +2063,7 @@ void MapDrawer::DrawTooltips() {
 			}
 		}
 	}
+	glEnable(GL_TEXTURE_2D);
 }
 
 void MapDrawer::DrawLight() {

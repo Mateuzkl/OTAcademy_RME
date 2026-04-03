@@ -20,6 +20,8 @@
 #include "materials.h"
 #include "gui.h"
 #include <string.h> // memcpy
+#include <fstream>
+#include <vector>
 
 #include "items.h"
 #include "item.h"
@@ -1085,4 +1087,321 @@ ItemType& ItemDatabase::getItemType(int id) {
 bool ItemDatabase::typeExists(int id) const {
 	ItemType* it = items[id];
 	return it != nullptr;
+}
+
+bool ItemDatabase::unserializeDatItem(ItemType* t, const uint8_t* buf, size_t& pos, size_t bufSize, bool extendedSprites) {
+	uint8_t flag;
+	do {
+		if (pos >= bufSize) return false;
+		flag = buf[pos++];
+
+		switch (flag) {
+			case 0: { // Ground
+				t->group = ITEM_GROUP_GROUND;
+				// uint16_t groundSpeed
+				pos += 2;
+				break;
+			}
+
+			case 1: // GroundBorder
+				t->alwaysOnTopOrder = 1;
+				t->alwaysOnBottom = true;
+				break;
+
+			case 2: // OnBottom
+				t->alwaysOnTopOrder = 2;
+				t->alwaysOnBottom = true;
+				break;
+
+			case 3: // OnTop
+				t->alwaysOnTopOrder = 3;
+				break;
+
+			case 4: // Container
+				t->group = ITEM_GROUP_CONTAINER;
+				t->type = ITEM_TYPE_CONTAINER;
+				break;
+
+			case 5: // Stackable
+				t->stackable = true;
+				break;
+
+			case 6: // ForceUse
+				break;
+
+			case 7: // MultiUse
+				break;
+
+			case 8: { // Writable
+				t->canWriteText = true;
+				t->canReadText = true;
+				uint16_t maxTextLen;
+				std::memcpy(&maxTextLen, &buf[pos], sizeof(maxTextLen));
+				pos += sizeof(maxTextLen);
+				t->maxTextLen = maxTextLen;
+				break;
+			}
+
+			case 9: { // WritableOnce
+				t->canReadText = true;
+				uint16_t maxTextLen;
+				std::memcpy(&maxTextLen, &buf[pos], sizeof(maxTextLen));
+				pos += sizeof(maxTextLen);
+				t->maxTextLen = maxTextLen;
+				break;
+			}
+
+			case 10: // FluidContainer
+				t->group = ITEM_GROUP_FLUID;
+				break;
+
+			case 11: // Fluid (Splash)
+				t->group = ITEM_GROUP_SPLASH;
+				break;
+
+			case 12: // IsUnpassable
+				t->unpassable = true;
+				break;
+
+			case 13: // IsUnmoveable
+				t->moveable = false;
+				break;
+
+			case 14: // BlockMissiles
+				t->blockMissiles = true;
+				break;
+
+			case 15: // BlockPathfinder
+				t->blockPathfinder = true;
+				break;
+
+			case 16: // Pickupable
+				t->pickupable = true;
+				break;
+
+			case 17: // Hangable
+				t->isHangable = true;
+				break;
+
+			case 18: // IsHorizontal
+				t->hookSouth = true;
+				break;
+
+			case 19: // IsVertical
+				t->hookEast = true;
+				break;
+
+			case 20: // Rotatable
+				t->rotable = true;
+				break;
+
+			case 21: // HasLight
+				pos += 4; // lightLevel (2) + lightColor (2)
+				break;
+
+			case 22: // DontHide
+				break;
+
+			case 23: // Translucent
+				break;
+
+			case 24: // HasOffset
+				pos += 4; // OffsetX (2) + OffsetY (2)
+				break;
+
+			case 25: // HasElevation
+				t->hasElevation = true;
+				pos += 2; // elevation height
+				break;
+
+			case 26: // Lying
+				break;
+
+			case 27: // AnimateAlways
+				break;
+
+			case 28: // Minimap
+				pos += 2; // minimap color
+				break;
+
+			case 29: { // LensHelp
+				uint16_t lensHelp;
+				std::memcpy(&lensHelp, &buf[pos], sizeof(lensHelp));
+				pos += sizeof(lensHelp);
+				if (lensHelp == 1112) {
+					t->canReadText = true;
+				}
+				break;
+			}
+
+			case 30: // FullGround
+				break;
+
+			case 31: // IgnoreLook
+				t->ignoreLook = true;
+				break;
+
+			case 32: // Cloth
+				pos += 2; // clothSlot
+				break;
+
+			case 33: // MarketItem
+				pos += 6; // category + tradeAs + showAs
+				{
+					uint16_t nameLen;
+					std::memcpy(&nameLen, &buf[pos], sizeof(nameLen));
+					pos += sizeof(nameLen);
+					pos += nameLen + 4; // name + restrictProfession + restrictLevel
+				}
+				break;
+
+			case 0xFF: // LastFlag
+				break;
+
+			default:
+				return false;
+		}
+	} while (flag != 0xFF);
+
+	// Skip sprite data
+	if (pos + 2 > bufSize) return false;
+	uint8_t _width = buf[pos++];
+	uint8_t _height = buf[pos++];
+	if (_width > 1 || _height > 1) {
+		pos++; // exactSize
+	}
+
+	uint8_t _layers = buf[pos++];
+	uint8_t _patternX = buf[pos++];
+	uint8_t _patternY = buf[pos++];
+	uint8_t _patternZ = buf[pos++];
+	uint8_t _frames = buf[pos++];
+
+	uint32_t numSprites = static_cast<uint32_t>(_width) * _height * _layers *
+	                      _patternX * _patternY * _patternZ * _frames;
+
+	uint32_t spriteIdBytes = extendedSprites ? 4 : 2;
+	pos += static_cast<size_t>(spriteIdBytes) * numSprites;
+
+	return true;
+}
+
+bool ItemDatabase::loadFromDat(const FileName& datafile, wxString& error, wxArrayString& warnings) {
+	std::string filename = nstr((datafile.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + datafile.GetFullName()));
+
+	std::ifstream fin(filename, std::ios::binary | std::ios::ate);
+	if (!fin.is_open()) {
+		error = "Couldn't open file \"" + wxstr(filename) + "\"";
+		return false;
+	}
+
+	auto fileSize = static_cast<size_t>(fin.tellg());
+	fin.seekg(0, std::ios::beg);
+
+	std::vector<uint8_t> buf(fileSize);
+	fin.read(reinterpret_cast<char*>(buf.data()), fileSize);
+	fin.close();
+
+	if (fileSize < 12) {
+		error = "assets.dat file is too small";
+		return false;
+	}
+
+	// Skip signature (4 bytes)
+	size_t pos = 4;
+
+	// Read counts
+	uint16_t itemCount = 0;
+	std::memcpy(&itemCount, &buf[pos], sizeof(itemCount));
+	pos += sizeof(itemCount);
+
+	// Skip outfit count, effect count, distance count
+	pos += 6; // uint16_t * 3
+
+	// Auto-detect extended sprite IDs (uint32 vs uint16)
+	bool extendedSprites = false;
+	size_t detectPos = pos;
+	{
+		bool ok = true;
+		uint8_t b;
+		do {
+			if (detectPos >= fileSize) { ok = false; break; }
+			b = buf[detectPos++];
+			switch (b) {
+				case 0: case 8: case 9: case 25: case 28: case 29: case 32:
+					detectPos += 2; break;
+				case 21: case 24:
+					detectPos += 4; break;
+				case 33: {
+					detectPos += 6;
+					uint16_t nameLen;
+					std::memcpy(&nameLen, &buf[detectPos], sizeof(nameLen));
+					detectPos += sizeof(nameLen);
+					detectPos += nameLen + 4;
+					break;
+				}
+				case 255: break;
+				default:
+					if (b > 33) { ok = false; }
+					break;
+			}
+		} while (ok && b != 0xFF);
+
+		if (ok && detectPos + 8 < fileSize) {
+			uint8_t w = buf[detectPos++];
+			uint8_t h = buf[detectPos++];
+			if (w > 1 || h > 1) detectPos++;
+			uint8_t layers = buf[detectPos++];
+			uint8_t px = buf[detectPos++];
+			uint8_t py = buf[detectPos++];
+			uint8_t pz = buf[detectPos++];
+			uint8_t frames = buf[detectPos++];
+
+			uint32_t numSprites = static_cast<uint32_t>(w) * h * layers * px * py * pz * frames;
+			if (numSprites > 0) {
+				size_t spriteStart = detectPos;
+
+				// Try uint16 sprite IDs first
+				detectPos = spriteStart + static_cast<size_t>(2) * numSprites;
+				if (detectPos < fileSize) {
+					uint8_t test = buf[detectPos];
+					if (test > 33 && test != 255) {
+						detectPos = spriteStart + static_cast<size_t>(4) * numSprites;
+						if (detectPos < fileSize) {
+							test = buf[detectPos];
+							if (test <= 33 || test == 255) {
+								extendedSprites = true;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	max_item_id = itemCount;
+
+	for (uint16_t id = 100; id <= itemCount; ++id) {
+		ItemType* t = newd ItemType();
+		t->id = id;
+		t->clientID = id;
+		t->sprite = static_cast<GameSprite*>(g_gui.gfx.getSprite(t->clientID));
+
+		if (!unserializeDatItem(t, buf.data(), pos, fileSize, extendedSprites)) {
+			warnings.push_back(wxString::Format("assets.dat: Failed to parse item id %d", id));
+			delete t;
+			return false;
+		}
+
+		if (items[t->id]) {
+			delete items[t->id];
+		}
+		items.set(t->id, t);
+	}
+
+	MajorVersion = 3;
+	MinorVersion = (uint32_t)-1; // assets.dat: skip OTB version checks
+	BuildNumber = 0;
+
+	return true;
 }

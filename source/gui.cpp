@@ -356,10 +356,17 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 
 	g_gui.SetLoadDone(20, "Loading items.otb file...");
 	if (!g_items.loadFromOtb(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb"), error, warnings)) {
-		error = "Couldn't load items.otb: " + error;
-		g_gui.DestroyLoadBar();
-		UnloadVersion();
-		return false;
+		wxString otbError = error;
+		error.clear();
+
+		g_gui.SetLoadDone(20, "Loading assets.dat file...");
+		if (!g_items.loadFromDat(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "assets.dat"), error, warnings)) {
+			error = "Couldn't load items.otb: " + otbError + "\nCouldn't load assets.dat: " + error;
+			g_gui.DestroyLoadBar();
+			UnloadVersion();
+			return false;
+		}
+		warnings.push_back("Loaded assets.dat instead of items.otb (serverID = clientID)");
 	}
 
 	g_gui.SetLoadDone(30, "Loading items.xml ...");

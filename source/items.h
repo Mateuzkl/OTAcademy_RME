@@ -434,6 +434,7 @@ public:
 	ItemType& getItemIdByClientID(int spriteId);
 
 	bool loadFromOtb(const FileName& datafile, wxString& error, wxArrayString& warnings);
+	bool loadFromDat(const FileName& datafile, wxString& error, wxArrayString& warnings);
 	bool loadFromGameXml(const FileName& datafile, wxString& error, wxArrayString& warnings);
 	bool loadItemFromGameXml(pugi::xml_node itemNode, int id);
 	bool loadMetaItem(pugi::xml_node node);
@@ -452,6 +453,7 @@ protected:
 	bool loadFromOtbVer1(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
 	bool loadFromOtbVer2(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
 	bool loadFromOtbVer3(BinaryNode* itemNode, wxString& error, wxArrayString& warnings);
+	bool unserializeDatItem(ItemType* t, const uint8_t* buf, size_t& pos, size_t bufSize, bool extendedSprites);
 
 protected:
 	// Count of GameSprite types
