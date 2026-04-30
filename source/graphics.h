@@ -44,6 +44,7 @@ class MapCanvas;
 class GraphicManager;
 class FileReadHandle;
 class Animator;
+class ItemType;
 
 struct SpriteLight {
 	uint8_t intensity = 0;
@@ -289,8 +290,8 @@ public:
 	// Metadata should be loaded first
 	// This fills the item / creature adress space
 	bool loadOTFI(const FileName& filename, wxString& error, wxArrayString& warnings);
-	bool loadSpriteMetadata(const FileName& datafile, wxString& error, wxArrayString& warnings);
-	bool loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* sType, wxString& error, wxArrayString& warnings);
+	bool loadSpriteMetadata(const FileName& datafile, wxString& error, wxArrayString& warnings, bool loadItemsFromDat = false);
+	bool loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* sType, wxString& error, wxArrayString& warnings, ItemType* itemType = nullptr);
 	bool loadSpriteData(const FileName& datafile, wxString& error, wxArrayString& warnings);
 
 	// Cleans old & unused textures according to config settings

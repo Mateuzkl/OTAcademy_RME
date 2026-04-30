@@ -134,6 +134,36 @@ void ItemDatabase::clear() {
 		delete items[i];
 		items.set(i, nullptr);
 	}
+	max_item_id = 0;
+	minclientID = 0;
+	maxclientID = 0;
+	MajorVersion = 0;
+	MinorVersion = 0;
+	BuildNumber = 0;
+}
+
+ItemType* ItemDatabase::createFromDat(uint16_t id, GameSprite* sprite) {
+	if (items[id]) {
+		delete items[id];
+	}
+
+	ItemType* item = newd ItemType();
+	item->id = id;
+	item->clientID = id;
+	item->sprite = sprite;
+	items.set(id, item);
+
+	if (max_item_id < id) {
+		max_item_id = id;
+	}
+
+	return item;
+}
+
+void ItemDatabase::setVersion(uint32_t majorVersion, uint32_t minorVersion, uint32_t buildNumber) {
+	MajorVersion = majorVersion;
+	MinorVersion = minorVersion;
+	BuildNumber = buildNumber;
 }
 
 bool ItemDatabase::loadFromOtbVer1(BinaryNode* itemNode, wxString& error, wxArrayString& warnings) {

@@ -19,6 +19,7 @@
 
 #include "sprites.h"
 #include "graphics.h"
+#include "items.h"
 #include "filehandle.h"
 #include "settings.h"
 #include "gui.h"
@@ -460,10 +461,123 @@ bool GraphicManager::loadOTFI(const FileName& filename, wxString& error, wxArray
 		sprites_file = wxFileName(filename.GetFullPath(), wxString(ASSETS_NAME) + ".spr");
 	}
 
+	if (client_version && client_version->getID() == CLIENT_VERSION_860) {
+		FileName dataAssets = client_version->getDataPath();
+		dataAssets.SetFullName("assets.dat");
+		wxFileName clientAssets(filename.GetFullPath(), "assets.dat");
+		if (dataAssets.FileExists()) {
+			metadata_file = dataAssets;
+		} else if (clientAssets.FileExists()) {
+			metadata_file = clientAssets;
+		}
+	}
+
 	return true;
 }
 
-bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& error, wxArrayString& warnings) {
+static bool isValidDatFlag86(uint8_t flag) {
+	return flag <= DatFlagMarket || flag == DatFlagLast;
+}
+
+static bool skipDatFlagPayload86(FileReadHandle& file, uint8_t flag) {
+	switch (flag) {
+		case DatFlagGround:
+		case DatFlagWritable:
+		case DatFlagWritableOnce:
+		case DatFlagElevation:
+		case DatFlagMinimapColor:
+		case DatFlagLensHelp:
+		case DatFlagCloth:
+			file.skip(2);
+			return file.tell() <= file.size();
+
+		case DatFlagLight:
+		case DatFlagDisplacement:
+			file.skip(4);
+			return file.tell() <= file.size();
+
+		case DatFlagMarket: {
+			file.skip(6);
+			uint16_t nameLength = 0;
+			if (!file.getU16(nameLength)) {
+				return false;
+			}
+			if (file.tell() + nameLength + 4 > file.size()) {
+				return false;
+			}
+			file.skip(nameLength + 4);
+			return true;
+		}
+
+		case DatFlagLast:
+			return true;
+
+		default:
+			return isValidDatFlag86(flag);
+	}
+}
+
+static bool detectExtendedSpriteIds86(FileReadHandle& file, size_t firstItemOffset) {
+	const size_t originalOffset = file.tell();
+	bool extendedSprites = false;
+
+	if (!file.seek(firstItemOffset)) {
+		return false;
+	}
+
+	bool ok = true;
+	uint8_t flag = 0;
+	do {
+		if (file.tell() >= file.size() || !file.getU8(flag) || !isValidDatFlag86(flag) || !skipDatFlagPayload86(file, flag)) {
+			ok = false;
+			break;
+		}
+	} while (flag != DatFlagLast);
+
+	if (ok && file.tell() + 8 <= file.size()) {
+		uint8_t width = 0;
+		uint8_t height = 0;
+		uint8_t layers = 0;
+		uint8_t patternX = 0;
+		uint8_t patternY = 0;
+		uint8_t patternZ = 0;
+		uint8_t frames = 0;
+
+		file.getU8(width);
+		file.getU8(height);
+		if ((width > 1 || height > 1) && file.tell() < file.size()) {
+			file.skip(1);
+		}
+		file.getU8(layers);
+		file.getU8(patternX);
+		file.getU8(patternY);
+		file.getU8(patternZ);
+		file.getU8(frames);
+
+		const size_t spriteStart = file.tell();
+		const size_t spriteCount = static_cast<size_t>(width) * height * layers * patternX * patternY * patternZ * frames;
+		const size_t uint16NextFlagOffset = spriteStart + spriteCount * sizeof(uint16_t);
+		const size_t uint32NextFlagOffset = spriteStart + spriteCount * sizeof(uint32_t);
+
+		bool uint16LooksValid = false;
+		bool uint32LooksValid = false;
+		uint8_t nextFlag = 0;
+
+		if (uint16NextFlagOffset < file.size() && file.seek(uint16NextFlagOffset) && file.getU8(nextFlag)) {
+			uint16LooksValid = isValidDatFlag86(nextFlag);
+		}
+		if (uint32NextFlagOffset < file.size() && file.seek(uint32NextFlagOffset) && file.getU8(nextFlag)) {
+			uint32LooksValid = isValidDatFlag86(nextFlag);
+		}
+
+		extendedSprites = !uint16LooksValid && uint32LooksValid;
+	}
+
+	file.seek(originalOffset);
+	return extendedSprites;
+}
+
+bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& error, wxArrayString& warnings, bool loadItemsFromDat) {
 	// items.otb has most of the info we need. This only loads the GameSprite metadata
 	FileReadHandle file(nstr(datafile.GetFullPath()));
 
@@ -481,6 +595,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 	file.getU16(creature_count);
 	file.getU16(effect_count);
 	file.getU16(distance_count);
+	const size_t firstItemOffset = file.tell();
 
 	uint32_t minID = 100; // items start with id 100
 	// We don't load distance/effects, if we would, just add effect_count & distance_count here
@@ -493,6 +608,9 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 		has_frame_durations = dat_format >= DAT_FORMAT_1050;
 		has_frame_groups = dat_format >= DAT_FORMAT_1057;
 	}
+	if (loadItemsFromDat && dat_format == DAT_FORMAT_86 && detectExtendedSpriteIds86(file, firstItemOffset)) {
+		is_extended = true;
+	}
 
 	uint16_t id = minID;
 	// loop through all ItemDatabase until we reach the end of file
@@ -502,11 +620,19 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 
 		sType->id = id;
 
+		ItemType* itemType = nullptr;
+		if (loadItemsFromDat && id <= item_count) {
+			itemType = g_items.createFromDat(id, sType);
+		}
+
 		// Load the sprite flags
-		if (!loadSpriteMetadataFlags(file, sType, error, warnings)) {
+		if (!loadSpriteMetadataFlags(file, sType, error, warnings, itemType)) {
 			wxString msg;
 			msg << "Failed to load flags for sprite " << sType->id;
 			warnings.push_back(msg);
+		}
+		if (itemType) {
+			itemType->alwaysOnBottom = itemType->alwaysOnTopOrder != 0;
 		}
 
 		// Reads the group count
@@ -590,7 +716,7 @@ bool GraphicManager::loadSpriteMetadata(const FileName& datafile, wxString& erro
 	return true;
 }
 
-bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* sType, wxString& error, wxArrayString& warnings) {
+bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* sType, wxString& error, wxArrayString& warnings, ItemType* itemType) {
 	uint8_t prev_flag = 0;
 	uint8_t flag = DatFlagLast;
 
@@ -674,23 +800,89 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 
 		switch (flag) {
 			case DatFlagGroundBorder:
+				if (itemType) {
+					itemType->alwaysOnTopOrder = 1;
+				}
+				break;
 			case DatFlagOnBottom:
+				if (itemType) {
+					itemType->alwaysOnTopOrder = 2;
+				}
+				break;
 			case DatFlagOnTop:
+				if (itemType) {
+					itemType->alwaysOnTopOrder = 3;
+				}
+				break;
 			case DatFlagContainer:
+				if (itemType) {
+					itemType->group = ITEM_GROUP_CONTAINER;
+					itemType->type = ITEM_TYPE_CONTAINER;
+				}
+				break;
 			case DatFlagStackable:
+				if (itemType) {
+					itemType->stackable = true;
+				}
+				break;
 			case DatFlagForceUse:
 			case DatFlagMultiUse:
+				break;
 			case DatFlagFluidContainer:
+				if (itemType) {
+					itemType->group = ITEM_GROUP_FLUID;
+				}
+				break;
 			case DatFlagSplash:
+				if (itemType) {
+					itemType->group = ITEM_GROUP_SPLASH;
+				}
+				break;
 			case DatFlagNotWalkable:
+				if (itemType) {
+					itemType->unpassable = true;
+				}
+				break;
 			case DatFlagNotMoveable:
+				if (itemType) {
+					itemType->moveable = false;
+				}
+				break;
 			case DatFlagBlockProjectile:
+				if (itemType) {
+					itemType->blockMissiles = true;
+				}
+				break;
 			case DatFlagNotPathable:
+				if (itemType) {
+					itemType->blockPathfinder = true;
+				}
+				break;
 			case DatFlagPickupable:
+				if (itemType) {
+					itemType->pickupable = true;
+				}
+				break;
 			case DatFlagHangable:
+				if (itemType) {
+					itemType->isHangable = true;
+				}
+				break;
 			case DatFlagHookSouth:
+				if (itemType) {
+					itemType->hookSouth = true;
+				}
+				break;
 			case DatFlagHookEast:
+				if (itemType) {
+					itemType->hookEast = true;
+				}
+				break;
 			case DatFlagRotateable:
+				if (itemType) {
+					itemType->rotable = true;
+				}
+				break;
 			case DatFlagDontHide:
 			case DatFlagTranslucent:
 			case DatFlagLyingCorpse:
@@ -700,19 +892,58 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 			case DatFlagWrappable:
 			case DatFlagUnwrappable:
 			case DatFlagTopEffect:
-			case DatFlagFloorChange:
 			case DatFlagNoMoveAnimation:
 			case DatFlagChargeable:
 				break;
+			case DatFlagFloorChange:
+				if (itemType) {
+					itemType->floorChange = true;
+				}
+				break;
 
 			case DatFlagGround:
-			case DatFlagWritable:
-			case DatFlagWritableOnce:
+				if (itemType) {
+					itemType->group = ITEM_GROUP_GROUND;
+				}
+				file.skip(2);
+				break;
+
+			case DatFlagWritable: {
+				uint16_t maxTextLen;
+				file.getU16(maxTextLen);
+				if (itemType) {
+					itemType->canReadText = true;
+					itemType->canWriteText = true;
+					itemType->allowDistRead = true;
+					itemType->maxTextLen = maxTextLen;
+				}
+				break;
+			}
+
+			case DatFlagWritableOnce: {
+				uint16_t maxTextLen;
+				file.getU16(maxTextLen);
+				if (itemType) {
+					itemType->canReadText = true;
+					itemType->allowDistRead = true;
+					itemType->maxTextLen = maxTextLen;
+				}
+				break;
+			}
+
 			case DatFlagCloth:
-			case DatFlagLensHelp:
 			case DatFlagUsable:
 				file.skip(2);
 				break;
+
+			case DatFlagLensHelp: {
+				uint16_t lensHelp = 0;
+				file.getU16(lensHelp);
+				if (itemType && lensHelp == 1112) {
+					itemType->canReadText = true;
+				}
+				break;
+			}
 
 			case DatFlagLight: {
 				SpriteLight light;
@@ -745,6 +976,9 @@ bool GraphicManager::loadSpriteMetadataFlags(FileReadHandle& file, GameSprite* s
 				uint16_t draw_height;
 				file.getU16(draw_height);
 				sType->draw_height = draw_height;
+				if (itemType) {
+					itemType->hasElevation = true;
+				}
 				break;
 			}
 

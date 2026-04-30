@@ -443,6 +443,17 @@ bool ClientVersion::hasValidPaths() {
 		}
 	}
 
+	if (getID() == CLIENT_VERSION_860) {
+		FileName dataAssets = getDataPath();
+		dataAssets.SetFullName("assets.dat");
+		wxFileName clientAssets(client_path.GetFullPath(), "assets.dat");
+		if (dataAssets.FileExists()) {
+			metadata_path = dataAssets;
+		} else if (clientAssets.FileExists()) {
+			metadata_path = clientAssets;
+		}
+	}
+
 	if (!metadata_path.FileExists() || !sprites_path.FileExists()) {
 		return false;
 	}

@@ -36,7 +36,7 @@
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -462,7 +462,6 @@
     <ClInclude Include="..\..\source\lua\lua_script.h" />
     <ClInclude Include="..\..\source\lua\lua_scripts_window.h" />
     <ClInclude Include="..\..\source\lua\lua_script_manager.h" />
-
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\source\mkpch.cpp">

@@ -337,7 +337,8 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 	g_gui.SetLoadDone(0, "Loading metadata file...");
 
 	wxFileName metadata_path = g_gui.gfx.getMetadataFileName();
-	if (!g_gui.gfx.loadSpriteMetadata(metadata_path, error, warnings)) {
+	const bool loadItemsFromAssetsDat = GetCurrentVersionID() == CLIENT_VERSION_860 && metadata_path.GetFullName().CmpNoCase("assets.dat") == 0;
+	if (!g_gui.gfx.loadSpriteMetadata(metadata_path, error, warnings, loadItemsFromAssetsDat)) {
 		error = "Couldn't load metadata: " + error;
 		g_gui.DestroyLoadBar();
 		UnloadVersion();
@@ -354,12 +355,17 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 		return false;
 	}
 
-	g_gui.SetLoadDone(20, "Loading items.otb file...");
-	if (!g_items.loadFromOtb(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb"), error, warnings)) {
-		error = "Couldn't load items.otb: " + error;
-		g_gui.DestroyLoadBar();
-		UnloadVersion();
-		return false;
+	if (loadItemsFromAssetsDat) {
+		const OtbVersion otbVersion = getLoadedVersion()->getOTBVersion();
+		g_items.setVersion(otbVersion.format_version, otbVersion.id, 0);
+	} else {
+		g_gui.SetLoadDone(20, "Loading items.otb file...");
+		if (!g_items.loadFromOtb(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "items.otb"), error, warnings)) {
+			error = "Couldn't load items.otb: " + error;
+			g_gui.DestroyLoadBar();
+			UnloadVersion();
+			return false;
+		}
 	}
 
 	g_gui.SetLoadDone(30, "Loading items.xml ...");
