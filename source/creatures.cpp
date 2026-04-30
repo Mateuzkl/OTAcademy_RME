@@ -230,246 +230,246 @@ CreatureType* CreatureType::loadFromOTXML(const FileName& filename, pugi::xml_do
 
 namespace {
 
-struct LuaCreatureEntry {
-	bool isNpc = false;
-	std::string name;
-	std::string variable;
-	size_t createEnd = 0;
-};
+	struct LuaCreatureEntry {
+		bool isNpc = false;
+		std::string name;
+		std::string variable;
+		size_t createEnd = 0;
+	};
 
-bool readTextFile(const FileName& filename, std::string& out, wxString& error) {
-	std::ifstream file(nstr(filename.GetFullPath()), std::ios::binary);
-	if (!file.is_open()) {
-		error = "Couldn't open file \"" + filename.GetFullName() + "\".";
-		return false;
-	}
-
-	std::ostringstream stream;
-	stream << file.rdbuf();
-	out = stream.str();
-	return true;
-}
-
-std::string unquoteLuaString(const std::string& value) {
-	if (value.size() < 2) {
-		return value;
-	}
-
-	const char quote = value.front();
-	if ((quote != '"' && quote != '\'') || value.back() != quote) {
-		return value;
-	}
-
-	std::string result;
-	result.reserve(value.size() - 2);
-	bool escaped = false;
-	for (size_t i = 1; i + 1 < value.size(); ++i) {
-		const char c = value[i];
-		if (escaped) {
-			switch (c) {
-				case 'n':
-					result.push_back('\n');
-					break;
-				case 'r':
-					result.push_back('\r');
-					break;
-				case 't':
-					result.push_back('\t');
-					break;
-				default:
-					result.push_back(c);
-					break;
-			}
-			escaped = false;
-		} else if (c == '\\') {
-			escaped = true;
-		} else {
-			result.push_back(c);
-		}
-	}
-	return result;
-}
-
-bool resolveLuaName(const std::string& content, const std::string& token, std::string& name) {
-	if (token.empty()) {
-		return false;
-	}
-
-	if (token.front() == '"' || token.front() == '\'') {
-		name = unquoteLuaString(token);
-		return !name.empty();
-	}
-
-	const std::regex assignmentRegex(
-		"(?:local\\s+)?" + token + "\\s*=\\s*((?:\"(?:\\\\.|[^\"])*\")|(?:'(?:\\\\.|[^'])*'))",
-		std::regex_constants::icase
-	);
-	std::smatch match;
-	if (std::regex_search(content, match, assignmentRegex)) {
-		name = unquoteLuaString(match[1].str());
-		return !name.empty();
-	}
-	return false;
-}
-
-bool readBraceBlock(const std::string& content, size_t openBrace, std::string& block) {
-	if (openBrace == std::string::npos || openBrace >= content.size() || content[openBrace] != '{') {
-		return false;
-	}
-
-	int depth = 0;
-	char quote = 0;
-	bool escaped = false;
-	bool lineComment = false;
-	for (size_t i = openBrace; i < content.size(); ++i) {
-		const char c = content[i];
-		const char next = (i + 1 < content.size()) ? content[i + 1] : '\0';
-
-		if (lineComment) {
-			if (c == '\n' || c == '\r') {
-				lineComment = false;
-			}
-			continue;
+	bool readTextFile(const FileName& filename, std::string& out, wxString& error) {
+		std::ifstream file(nstr(filename.GetFullPath()), std::ios::binary);
+		if (!file.is_open()) {
+			error = "Couldn't open file \"" + filename.GetFullName() + "\".";
+			return false;
 		}
 
-		if (quote != 0) {
+		std::ostringstream stream;
+		stream << file.rdbuf();
+		out = stream.str();
+		return true;
+	}
+
+	std::string unquoteLuaString(const std::string& value) {
+		if (value.size() < 2) {
+			return value;
+		}
+
+		const char quote = value.front();
+		if ((quote != '"' && quote != '\'') || value.back() != quote) {
+			return value;
+		}
+
+		std::string result;
+		result.reserve(value.size() - 2);
+		bool escaped = false;
+		for (size_t i = 1; i + 1 < value.size(); ++i) {
+			const char c = value[i];
 			if (escaped) {
+				switch (c) {
+					case 'n':
+						result.push_back('\n');
+						break;
+					case 'r':
+						result.push_back('\r');
+						break;
+					case 't':
+						result.push_back('\t');
+						break;
+					default:
+						result.push_back(c);
+						break;
+				}
 				escaped = false;
 			} else if (c == '\\') {
 				escaped = true;
-			} else if (c == quote) {
-				quote = 0;
-			}
-			continue;
-		}
-
-		if (c == '-' && next == '-') {
-			lineComment = true;
-			++i;
-			continue;
-		}
-
-		if (c == '"' || c == '\'') {
-			quote = c;
-			continue;
-		}
-
-		if (c == '{') {
-			++depth;
-		} else if (c == '}') {
-			--depth;
-			if (depth == 0) {
-				block = content.substr(openBrace, i - openBrace + 1);
-				return true;
+			} else {
+				result.push_back(c);
 			}
 		}
-	}
-	return false;
-}
-
-bool findLuaTableAfterPattern(const std::string& content, const std::regex& pattern, size_t start, std::string& table) {
-	if (start >= content.size()) {
-		start = 0;
+		return result;
 	}
 
-	std::smatch match;
-	const std::string tail = content.substr(start);
-	if (!std::regex_search(tail, match, pattern)) {
+	bool resolveLuaName(const std::string& content, const std::string& token, std::string& name) {
+		if (token.empty()) {
+			return false;
+		}
+
+		if (token.front() == '"' || token.front() == '\'') {
+			name = unquoteLuaString(token);
+			return !name.empty();
+		}
+
+		const std::regex assignmentRegex(
+			"(?:local\\s+)?" + token + "\\s*=\\s*((?:\"(?:\\\\.|[^\"])*\")|(?:'(?:\\\\.|[^'])*'))",
+			std::regex_constants::icase
+		);
+		std::smatch match;
+		if (std::regex_search(content, match, assignmentRegex)) {
+			name = unquoteLuaString(match[1].str());
+			return !name.empty();
+		}
 		return false;
 	}
 
-	const size_t openBrace = start + match.position(0) + match.length(0) - 1;
-	return readBraceBlock(content, openBrace, table);
-}
-
-void applyLuaOutfit(const std::string& table, Outfit& outfit) {
-	const std::regex valueRegex(R"(([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(-?\d+))", std::regex_constants::icase);
-	for (std::sregex_iterator it(table.begin(), table.end(), valueRegex), end; it != end; ++it) {
-		std::string key = as_lower_str((*it)[1].str());
-		const int value = std::stoi((*it)[2].str());
-
-		if (key == "looktype" || key == "type") {
-			outfit.lookType = value;
-		} else if (key == "looktypeex" || key == "lookitem" || key == "lookex" || key == "typeex" || key == "item") {
-			outfit.lookItem = value;
-		} else if (key == "lookmount" || key == "mount") {
-			outfit.lookMount = value;
-		} else if (key == "lookaddons" || key == "lookaddon" || key == "addons" || key == "addon") {
-			outfit.lookAddon = value;
-		} else if (key == "lookhead" || key == "head") {
-			outfit.lookHead = value;
-		} else if (key == "lookbody" || key == "body") {
-			outfit.lookBody = value;
-		} else if (key == "looklegs" || key == "legs") {
-			outfit.lookLegs = value;
-		} else if (key == "lookfeet" || key == "feet") {
-			outfit.lookFeet = value;
-		} else if (key == "lookmounthead" || key == "mounthead") {
-			outfit.lookMountHead = value;
-		} else if (key == "lookmountbody" || key == "mountbody") {
-			outfit.lookMountBody = value;
-		} else if (key == "lookmountlegs" || key == "mountlegs") {
-			outfit.lookMountLegs = value;
-		} else if (key == "lookmountfeet" || key == "mountfeet") {
-			outfit.lookMountFeet = value;
+	bool readBraceBlock(const std::string& content, size_t openBrace, std::string& block) {
+		if (openBrace == std::string::npos || openBrace >= content.size() || content[openBrace] != '{') {
+			return false;
 		}
-	}
-}
 
-std::vector<CreatureType*> loadCreatureTypesFromLua(const FileName& filename, const std::string& content, wxArrayString& warnings) {
-	std::vector<LuaCreatureEntry> entries;
-	const std::regex createRegex(
-		R"lua((?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*Game\.create(Monster|Npc)Type\s*\(\s*((?:"(?:\\.|[^"])*")|(?:'(?:\\.|[^'])*')|[A-Za-z_][A-Za-z0-9_]*)\s*\))lua",
-		std::regex_constants::icase
-	);
+		int depth = 0;
+		char quote = 0;
+		bool escaped = false;
+		bool lineComment = false;
+		for (size_t i = openBrace; i < content.size(); ++i) {
+			const char c = content[i];
+			const char next = (i + 1 < content.size()) ? content[i + 1] : '\0';
 
-	for (std::sregex_iterator it(content.begin(), content.end(), createRegex), end; it != end; ++it) {
-		LuaCreatureEntry entry;
-		entry.variable = (*it)[1].str();
-		entry.isNpc = as_lower_str((*it)[2].str()) == "npc";
-		entry.createEnd = static_cast<size_t>(it->position(0) + it->length(0));
+			if (lineComment) {
+				if (c == '\n' || c == '\r') {
+					lineComment = false;
+				}
+				continue;
+			}
 
-		if (!resolveLuaName(content, (*it)[3].str(), entry.name)) {
-			entry.name = nstr(filename.GetName());
+			if (quote != 0) {
+				if (escaped) {
+					escaped = false;
+				} else if (c == '\\') {
+					escaped = true;
+				} else if (c == quote) {
+					quote = 0;
+				}
+				continue;
+			}
+
+			if (c == '-' && next == '-') {
+				lineComment = true;
+				++i;
+				continue;
+			}
+
+			if (c == '"' || c == '\'') {
+				quote = c;
+				continue;
+			}
+
+			if (c == '{') {
+				++depth;
+			} else if (c == '}') {
+				--depth;
+				if (depth == 0) {
+					block = content.substr(openBrace, i - openBrace + 1);
+					return true;
+				}
+			}
 		}
-		entries.push_back(entry);
+		return false;
 	}
 
-	std::vector<CreatureType*> creatures;
-	for (const LuaCreatureEntry& entry : entries) {
-		std::string outfitTable;
-		const std::regex directOutfitRegex("\\b" + entry.variable + R"lua(\s*:\s*outfit\s*\(\s*\{)lua", std::regex_constants::icase);
-		bool hasOutfit = findLuaTableAfterPattern(content, directOutfitRegex, entry.createEnd, outfitTable);
-
-		if (!hasOutfit) {
-			const std::regex configOutfitRegex(entry.isNpc ? R"lua(\bnpcConfig\s*\.\s*outfit\s*=\s*\{)lua" : R"lua(\bmonster\s*\.\s*outfit\s*=\s*\{)lua", std::regex_constants::icase);
-			hasOutfit = findLuaTableAfterPattern(content, configOutfitRegex, entry.createEnd, outfitTable);
+	bool findLuaTableAfterPattern(const std::string& content, const std::regex& pattern, size_t start, std::string& table) {
+		if (start >= content.size()) {
+			start = 0;
 		}
 
-		if (!hasOutfit) {
-			warnings.push_back("Lua creature \"" + wxstr(entry.name) + "\" has no supported outfit block.");
-			continue;
+		std::smatch match;
+		const std::string tail = content.substr(start);
+		if (!std::regex_search(tail, match, pattern)) {
+			return false;
 		}
 
-		CreatureType* creatureType = newd CreatureType();
-		creatureType->name = entry.name;
-		creatureType->isNpc = entry.isNpc;
-		applyLuaOutfit(outfitTable, creatureType->outfit);
-
-		if (!creatureType->isNpc && creatureType->outfit.lookType != 0 && g_gui.gfx.getCreatureSprite(creatureType->outfit.lookType) == nullptr) {
-			warnings.push_back("Invalid creature \"" + wxstr(creatureType->name) + "\" look type #" + std::to_string(creatureType->outfit.lookType));
-		}
-
-		creatures.push_back(creatureType);
+		const size_t openBrace = start + match.position(0) + match.length(0) - 1;
+		return readBraceBlock(content, openBrace, table);
 	}
 
-	return creatures;
-}
+	void applyLuaOutfit(const std::string& table, Outfit& outfit) {
+		const std::regex valueRegex(R"(([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(-?\d+))", std::regex_constants::icase);
+		for (std::sregex_iterator it(table.begin(), table.end(), valueRegex), end; it != end; ++it) {
+			std::string key = as_lower_str((*it)[1].str());
+			const int value = std::stoi((*it)[2].str());
 
-bool shouldSkipDirectoryImportFile(const wxString& path) {
-	const wxString lower = path.Lower();
-	return lower.Contains("\\lib\\") || lower.Contains("/lib/");
-}
+			if (key == "looktype" || key == "type") {
+				outfit.lookType = value;
+			} else if (key == "looktypeex" || key == "lookitem" || key == "lookex" || key == "typeex" || key == "item") {
+				outfit.lookItem = value;
+			} else if (key == "lookmount" || key == "mount") {
+				outfit.lookMount = value;
+			} else if (key == "lookaddons" || key == "lookaddon" || key == "addons" || key == "addon") {
+				outfit.lookAddon = value;
+			} else if (key == "lookhead" || key == "head") {
+				outfit.lookHead = value;
+			} else if (key == "lookbody" || key == "body") {
+				outfit.lookBody = value;
+			} else if (key == "looklegs" || key == "legs") {
+				outfit.lookLegs = value;
+			} else if (key == "lookfeet" || key == "feet") {
+				outfit.lookFeet = value;
+			} else if (key == "lookmounthead" || key == "mounthead") {
+				outfit.lookMountHead = value;
+			} else if (key == "lookmountbody" || key == "mountbody") {
+				outfit.lookMountBody = value;
+			} else if (key == "lookmountlegs" || key == "mountlegs") {
+				outfit.lookMountLegs = value;
+			} else if (key == "lookmountfeet" || key == "mountfeet") {
+				outfit.lookMountFeet = value;
+			}
+		}
+	}
+
+	std::vector<CreatureType*> loadCreatureTypesFromLua(const FileName& filename, const std::string& content, wxArrayString& warnings) {
+		std::vector<LuaCreatureEntry> entries;
+		const std::regex createRegex(
+			R"lua((?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*Game\.create(Monster|Npc)Type\s*\(\s*((?:"(?:\\.|[^"])*")|(?:'(?:\\.|[^'])*')|[A-Za-z_][A-Za-z0-9_]*)\s*\))lua",
+			std::regex_constants::icase
+		);
+
+		for (std::sregex_iterator it(content.begin(), content.end(), createRegex), end; it != end; ++it) {
+			LuaCreatureEntry entry;
+			entry.variable = (*it)[1].str();
+			entry.isNpc = as_lower_str((*it)[2].str()) == "npc";
+			entry.createEnd = static_cast<size_t>(it->position(0) + it->length(0));
+
+			if (!resolveLuaName(content, (*it)[3].str(), entry.name)) {
+				entry.name = nstr(filename.GetName());
+			}
+			entries.push_back(entry);
+		}
+
+		std::vector<CreatureType*> creatures;
+		for (const LuaCreatureEntry& entry : entries) {
+			std::string outfitTable;
+			const std::regex directOutfitRegex("\\b" + entry.variable + R"lua(\s*:\s*outfit\s*\(\s*\{)lua", std::regex_constants::icase);
+			bool hasOutfit = findLuaTableAfterPattern(content, directOutfitRegex, entry.createEnd, outfitTable);
+
+			if (!hasOutfit) {
+				const std::regex configOutfitRegex(entry.isNpc ? R"lua(\bnpcConfig\s*\.\s*outfit\s*=\s*\{)lua" : R"lua(\bmonster\s*\.\s*outfit\s*=\s*\{)lua", std::regex_constants::icase);
+				hasOutfit = findLuaTableAfterPattern(content, configOutfitRegex, entry.createEnd, outfitTable);
+			}
+
+			if (!hasOutfit) {
+				warnings.push_back("Lua creature \"" + wxstr(entry.name) + "\" has no supported outfit block.");
+				continue;
+			}
+
+			CreatureType* creatureType = newd CreatureType();
+			creatureType->name = entry.name;
+			creatureType->isNpc = entry.isNpc;
+			applyLuaOutfit(outfitTable, creatureType->outfit);
+
+			if (!creatureType->isNpc && creatureType->outfit.lookType != 0 && g_gui.gfx.getCreatureSprite(creatureType->outfit.lookType) == nullptr) {
+				warnings.push_back("Invalid creature \"" + wxstr(creatureType->name) + "\" look type #" + std::to_string(creatureType->outfit.lookType));
+			}
+
+			creatures.push_back(creatureType);
+		}
+
+		return creatures;
+	}
+
+	bool shouldSkipDirectoryImportFile(const wxString& path) {
+		const wxString lower = path.Lower();
+		return lower.Contains("\\lib\\") || lower.Contains("/lib/");
+	}
 
 } // namespace
 
