@@ -619,8 +619,33 @@ bool MainFrame::DoQueryImportCreatures() {
 		long ret = g_gui.PopupDialog("Missing creatures", "There are missing creatures and/or NPC in the editor, do you want to load them from an OT monster/npc file?", wxYES | wxNO);
 		if (ret == wxID_YES) {
 			do {
-				wxFileDialog dlg(g_gui.root, "Import monster/npc file", "", "", "*.xml", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
-				if (dlg.ShowModal() == wxID_OK) {
+				const long importFolder = g_gui.PopupDialog("Import monster/npc data", "Import a whole folder recursively?\nChoose No to select individual XML/Lua files.", wxYES | wxNO | wxCANCEL);
+				if (importFolder == wxID_CANCEL) {
+					break;
+				}
+
+				if (importFolder == wxID_YES) {
+					wxDirDialog dlg(g_gui.root, "Import monster/npc folder", "", wxDD_DIR_MUST_EXIST);
+					if (dlg.ShowModal() == wxID_OK) {
+						wxString error;
+						wxArrayString warnings;
+						FileName importDir;
+						importDir.AssignDir(dlg.GetPath());
+						bool ok = g_creatures.importXMLFromOT(importDir, error, warnings);
+						if (ok) {
+							g_gui.ListDialog("Monster loader errors", warnings);
+						} else {
+							wxMessageBox("Error OT data folder \"" + dlg.GetPath() + "\".\n" + error, "Error", wxOK | wxICON_INFORMATION, g_gui.root);
+						}
+					} else {
+						break;
+					}
+				} else {
+					wxFileDialog dlg(g_gui.root, "Import monster/npc file", "", "", "Monster/NPC data (*.xml;*.lua)|*.xml;*.lua|XML files (*.xml)|*.xml|Lua files (*.lua)|*.lua|All files (*.*)|*.*", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
+					if (dlg.ShowModal() != wxID_OK) {
+						break;
+					}
+
 					wxArrayString paths;
 					dlg.GetPaths(paths);
 					for (uint32_t i = 0; i < paths.GetCount(); ++i) {
@@ -633,8 +658,6 @@ bool MainFrame::DoQueryImportCreatures() {
 							wxMessageBox("Error OT data file \"" + paths[i] + "\".\n" + error, "Error", wxOK | wxICON_INFORMATION, g_gui.root);
 						}
 					}
-				} else {
-					break;
 				}
 			} while (g_creatures.hasMissing());
 		}

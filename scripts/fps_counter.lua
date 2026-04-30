@@ -22,8 +22,8 @@ local config = {
     criticalColor = { r = 255, g = 80, b = 80, a = 255 }, -- Red for < 15 FPS
     padding = 8,
     margin = 10,
-    width = 85,
-    height = 38
+    width = 95,
+    height = 56
 }
 
 -- Get the appropriate color based on FPS value

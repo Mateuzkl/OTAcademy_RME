@@ -837,8 +837,30 @@ void MainMenuBar::OnImportMap(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MainMenuBar::OnImportMonsterData(wxCommandEvent& WXUNUSED(event)) {
-	wxFileDialog dlg(g_gui.root, "Import monster/npc file", "", "", "*.xml", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
-	if (dlg.ShowModal() == wxID_OK) {
+	const long importFolder = g_gui.PopupDialog("Import monster/npc data", "Import a whole folder recursively?\nChoose No to select individual XML/Lua files.", wxYES | wxNO | wxCANCEL);
+	if (importFolder == wxID_CANCEL) {
+		return;
+	}
+
+	if (importFolder == wxID_YES) {
+		wxDirDialog dlg(g_gui.root, "Import monster/npc folder", "", wxDD_DIR_MUST_EXIST);
+		if (dlg.ShowModal() == wxID_OK) {
+			wxString error;
+			wxArrayString warnings;
+			FileName importDir;
+			importDir.AssignDir(dlg.GetPath());
+			if (!g_creatures.importXMLFromOT(importDir, error, warnings)) {
+				g_gui.PopupDialog("Error", error, wxOK);
+			} else {
+				g_gui.ListDialog("Monster loader warnings", warnings);
+			}
+		}
+	} else {
+		wxFileDialog dlg(g_gui.root, "Import monster/npc file", "", "", "Monster/NPC data (*.xml;*.lua)|*.xml;*.lua|XML files (*.xml)|*.xml|Lua files (*.lua)|*.lua|All files (*.*)|*.*", wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
+		if (dlg.ShowModal() != wxID_OK) {
+			return;
+		}
+
 		wxArrayString paths;
 		dlg.GetPaths(paths);
 		for (uint32_t i = 0; i < paths.GetCount(); ++i) {
@@ -850,6 +872,7 @@ void MainMenuBar::OnImportMonsterData(wxCommandEvent& WXUNUSED(event)) {
 			}
 		}
 	}
+	g_gui.RefreshPalettes();
 }
 
 void MainMenuBar::OnImportMinimap(wxCommandEvent& WXUNUSED(event)) {

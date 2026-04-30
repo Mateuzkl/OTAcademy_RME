@@ -55,8 +55,13 @@ public:
 
 	bool loadFromXML(const FileName& filename, bool standard, wxString& error, wxArrayString& warnings);
 	bool importXMLFromOT(const FileName& filename, wxString& error, wxArrayString& warnings);
+	bool importLuaFromOT(const FileName& filename, wxString& error, wxArrayString& warnings);
+	bool importDirectoryFromOT(const FileName& directory, wxString& error, wxArrayString& warnings);
 
 	bool saveToXML(const FileName& filename);
+
+protected:
+	void addImportedCreatureType(CreatureType* creatureType);
 };
 
 class CreatureType {
